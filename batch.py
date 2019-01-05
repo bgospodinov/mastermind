@@ -1,19 +1,8 @@
-from multiprocessing.dummy import Pool as ThreadPool
+from multiprocessing import Pool, Value
 import logging
 from mastermind import Mastermind
-
-
-def pretty_name(attempt):
-    names = {"a": "red", "b": "green", "c": "blue", "d": "purple", "e": "yellow", "f": "white", "g": "pink",
-             "h": "orange"}
-    name = []
-    for c in attempt:
-        name.append(names[c])
-    return " ".join(name)
-
-
-k = 8 # NUMBER OF COLORS
-n = 4 # NUMBER OF PLACEHOLDERS
+from util import pretty_name_8_colors
+from argparser import parser
 
 logger = logging.getLogger('mastermind')
 logger.propagate = False
@@ -29,20 +18,32 @@ ch.setFormatter(formatter)
 
 logger.addHandler(ch)
 
-game_solver = Mastermind(k, n, logger, pretty_name)
+args = parser.parse_args()
+game_solver = Mastermind(args.k, args.n, logger=logger, pretty_printer=pretty_name_8_colors)
+
+
+def init_worker(shared_counter):
+    global counter
+    counter = shared_counter
 
 
 # hack to overcome limitation of Pool.map which is unable to execute instance methods
 def f(x):
-    return game_solver.solve_auto(x)
+    res = game_solver.batch_solve(x)
+    counter.value += 1
+    logger.info("{}/{} {}%".format(counter.value, len(game_solver.all_possible_combinations),
+                                   100.0 * counter.value / len(game_solver.all_possible_combinations)))
+    return res
 
 
 if __name__ == '__main__':
     try:
-        with ThreadPool(5) as p:
+        # counter in shared memory to measure progress across pool workers
+        counter = Value('i', 0)
+        with Pool(args.p, initializer=init_worker, initargs=(counter,)) as p:
             attempts = p.map(f, game_solver.all_possible_combinations)
 
-        print("Max/min/avg - {}/{}/{}".format(max(attempts), min(attempts), sum(attempts) / len(attempts)))
+        print("Min/max/avg - {}/{}/{}".format(min(attempts), max(attempts), sum(attempts) / len(attempts)))
     finally:
         ch.close()
         logger.removeHandler(ch)

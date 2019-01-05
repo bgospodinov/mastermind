@@ -1,21 +1,17 @@
 import string
-from random import randint
 from itertools import product
 from collections import Counter
 import sys
 
 
-def draw_combination(possible_combinations):
-    return possible_combinations[randint(0, len(possible_combinations) - 1)]
-
-
 class Mastermind:
-    def __init__(self, k, n, logger, prettyPrinter):
-        self.k = k
-        self.n = n
-        self.all_possible_combinations = list(product(string.ascii_lowercase[:self.k], repeat=n))
-        self.prettyPrinter = prettyPrinter
+    def __init__(self, num_colors, num_placeholders, initial_attempt=('a', 'a', 'b', 'b'), logger=None, pretty_printer=None):
+        self.k = num_colors
+        self.n = num_placeholders
+        self.all_possible_combinations = list(product(string.ascii_lowercase[:self.k], repeat=num_placeholders))
+        self.pretty_printer = pretty_printer if callable(pretty_printer) else lambda x: x
         self.logger = logger
+        self.initial_attempt = initial_attempt
         self.cache = {}
 
     def evaluate(self, this, that):
@@ -53,7 +49,7 @@ class Mastermind:
 
         # minimax
         max_decrease = - sys.maxsize - 1
-        best_combination = draw_combination(possible_combinations)
+        best_combination = None
 
         for combination in all_combinations:
             min_decrease = sys.maxsize
@@ -71,41 +67,50 @@ class Mastermind:
 
         return best_combination
 
-    def solve_auto(self, secret_combination):
+    def batch_solve(self, secret_combination):
         num_attempts = 1
-        self.logger.debug("==================")
-        self.logger.debug("Actual combination:")
-        self.logger.debug(self.prettyPrinter(secret_combination))
-        self.logger.debug("\n")
+
+        if self.logger:
+            self.logger.debug("==================")
+            self.logger.debug("Actual combination:")
+            self.logger.debug(self.pretty_printer(secret_combination))
+            self.logger.debug("\n")
+            self.logger.debug("Attempts:")
 
         # initial attempt
-        attempt = ('a', 'a', 'b', 'b')
+        attempt = self.initial_attempt
 
-        self.logger.debug("Attempts:")
         all_combinations = self.all_possible_combinations
         possible_combinations = self.all_possible_combinations
 
         while attempt != secret_combination:
-            self.logger.debug("Number of possible combinations is {}".format(len(possible_combinations)))
-            self.logger.debug(self.prettyPrinter(attempt))
+            if self.logger:
+                self.logger.debug("Number of possible combinations is {}".format(len(possible_combinations)))
+                self.logger.debug(self.pretty_printer(attempt))
             response = self.evaluate(attempt, secret_combination)
-            self.logger.debug(response)
+            if self.logger:
+                self.logger.debug(response)
 
             if len(possible_combinations) < 10:
-                self.logger.debug("Possible combinations")
-                for combination in possible_combinations:
-                    self.logger.debug(self.prettyPrinter(combination))
+                if self.logger:
+                    self.logger.debug("Possible combinations")
+                    for combination in possible_combinations:
+                        self.logger.debug(self.pretty_printer(combination))
 
             possible_combinations = self.filter_possible_combinations(possible_combinations, attempt, response)
             attempt = self.calculate_best_move(all_combinations, possible_combinations)
 
-            num_attempts += 1
-            self.logger.debug("\n")
+            assert attempt
 
-        self.logger.debug("Number of possible combinations is {}".format(len(possible_combinations)))
-        self.logger.debug(self.prettyPrinter(attempt))
-        self.logger.debug("Total number of attempts is {}".format(num_attempts))
-        self.logger.debug("\n")
-        print("Solved {} in {} attempts".format(secret_combination, num_attempts))
+            num_attempts += 1
+            if self.logger:
+                self.logger.debug("\n")
+
+        if self.logger:
+            self.logger.debug("Number of possible combinations is {}".format(len(possible_combinations)))
+            self.logger.debug(self.pretty_printer(attempt))
+            self.logger.debug("Total number of attempts is {}".format(num_attempts))
+            self.logger.debug("\n")
+            self.logger.info("Solved {} in {} attempts".format(secret_combination, num_attempts))
 
         return num_attempts
